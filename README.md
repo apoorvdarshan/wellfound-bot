@@ -7,16 +7,47 @@ click-flow + page HTML of each step** so you can hand it to AI agents.
 It is built to *not* look like a bot: real mouse movement, hovers,
 think-pauses, randomized timing, rate limits, and a dry-run default.
 
+## ⚠️ Read this first — Wellfound uses DataDome
+
+Wellfound runs **DataDome**, a serious commercial anti-bot. Testing showed:
+
+- **Headless = instant CAPTCHA wall.** A headless browser hitting `/jobs`
+  got served a DataDome CAPTCHA instead of the feed. Never run headless
+  here.
+- **A real, visible Chrome with your real profile is not flagged** — your
+  manual login worked with no challenge, and attaching read-only to it
+  keeps `navigator.webdriver` false.
+
+So the **safest mode is capture-assist**: *you* drive your real Chrome,
+and the tool only records. There is no automated navigation for DataDome
+to catch. If you let the tool drive the browser (`run.py`), keep it
+**headed**, slow, and small — and accept some residual risk.
+
 ## How it works
 
 | File | Role |
 |------|------|
-| `login.py` | Open Chrome once, log in by hand, save the session into `user_data/`. |
-| `run.py` | Reuse that session, walk jobs with human-like clicks, capture every step. |
+| `capture_assist.py` | **Safest.** You browse your real Chrome; tool attaches read-only and records DOM + screenshot on each Enter. No automated clicks. |
+| `login.py` | Open Chrome once, log in by hand; session saved into `user_data/`. Auto-detects login. |
+| `run.py` | **Higher risk.** Drives the browser to walk jobs with human-like clicks. Headed + dry-run only. |
+| `verify_session.py` | Headed read-only check that the saved session loads the feed. |
 | `config.py` | Your search URL, batch size, delays, dry-run toggle. |
 | `wellfound/human.py` | The "click properly" logic — motion, hovers, timing. |
-| `wellfound/browser.py` | Persistent Chrome profile + anti-fingerprint setup. |
+| `wellfound/browser.py` | Persistent real-Chrome profile, minimal/coherent fingerprint. |
 | `wellfound/capture.py` | Writes `captures/<run>/flow.jsonl` + per-step `.html` / `.png`. |
+
+## Recommended: capture-assist (safe)
+
+```bash
+python capture_assist.py
+```
+
+A real Chrome window opens on your `user_data/` profile. Browse Wellfound
+normally — search, open a job, open the apply modal. Whenever you want a
+step recorded, switch to the terminal and press **Enter**; type **q** to
+finish. Each capture saves the DOM + screenshot into
+`captures/assist-<timestamp>/`, building the `flow.jsonl` trace you feed
+to an agent. DataDome only ever sees your normal manual browsing.
 
 ## Setup
 
