@@ -84,3 +84,7 @@ batch.
   or operate accounts that aren't yours.
 - **`user_data/` holds your live login.** It's gitignored — never commit
   or share it.
+
+## License
+
+[MIT](LICENSE) © Apoorv Darshan
