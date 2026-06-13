@@ -46,7 +46,10 @@ def launch_chrome(port: int, profile: str) -> subprocess.Popen:
             f"--remote-debugging-port={port}",
             "--no-first-run",
             "--no-default-browser-check",
-            "--disable-blink-features=AutomationControlled",
+            # No --disable-blink-features=AutomationControlled: we don't pass
+            # --enable-automation, so navigator.webdriver is already false
+            # (verified), and omitting it removes Chrome's yellow automation
+            # banner — cleaner and one less anomaly.
         ],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,

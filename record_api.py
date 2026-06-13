@@ -93,27 +93,50 @@ def main() -> None:
         ctx.on("page", attach)
 
         print(f"\nRecording API traffic → ./captures/{run}/requests.jsonl")
-        print("Browse + do ONE apply in Chrome. Press Ctrl-C here when done.\n")
+        print("Browse + do ONE apply in Chrome. Press Ctrl-C here (or just close")
+        print("Chrome) when done.\n")
+
+        disconnected = {"v": False}
+        browser.on("disconnected", lambda *_: disconnected.__setitem__("v", True))
+
+        def snapshot_cookies():
+            # Save cookies whenever we can, so an abrupt Chrome close still
+            # leaves a recent snapshot (datadome/auth cookies refresh as you browse).
+            try:
+                (out / "cookies.json").write_text(
+                    json.dumps(ctx.cookies(), indent=2), encoding="utf-8"
+                )
+            except Exception:
+                pass
+
+        ticks = 0
         try:
-            while True:
-                # In the sync API, events only fire while a Playwright call
-                # is running — so pump with a short wait on any open page.
-                live = [pg for pg in ctx.pages if not pg.is_closed()]
-                if live:
-                    live[0].wait_for_timeout(400)
-                else:
+            while not disconnected["v"]:
+                # In the sync API, events only fire while a Playwright call is
+                # running, so pump with a short wait on a live page. A tab can
+                # close under us — tolerate that and re-pick next loop.
+                try:
+                    live = [pg for pg in ctx.pages if not pg.is_closed()]
+                except Exception:
+                    break
+                if not live:
                     time.sleep(0.4)
+                    continue
+                try:
+                    live[0].wait_for_timeout(400)
+                except Exception:
+                    continue  # that page closed mid-wait; just re-pick
+                ticks += 1
+                if ticks % 25 == 0:  # ~every 10s
+                    snapshot_cookies()
         except KeyboardInterrupt:
             print("\nStopping…")
 
-        # Snapshot cookies (your own) so we can see what a request needs.
+        snapshot_cookies()
         try:
-            (out / "cookies.json").write_text(
-                json.dumps(ctx.cookies(), indent=2), encoding="utf-8"
-            )
+            browser.close()  # detach only; your Chrome stays open
         except Exception:
             pass
-        browser.close()  # detach only; your Chrome stays open
 
     log.close()
     print(f"\nSaved {count['n']} request(s) → ./captures/{run}/requests.jsonl")
