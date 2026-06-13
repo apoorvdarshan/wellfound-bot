@@ -1,0 +1,21 @@
+Hey there,
+
+I'm a fullstack / frontend / backend engineer looking for a remote role.
+A line or two about your strongest work, links, and how to reach you.
+
+github.com/yourname
+Schedule a chat: cal.com/yourname
+
+---
+
+Hi there,
+
+Remote-friendly engineer here (fullstack / backend) — keen on this role.
+Swap in your own pitch; keep it short and specific.
+
+github.com/yourname
+cal.com/yourname
+
+# Copy this to note.txt (which is gitignored) and edit it with your details.
+# `---` on its own line separates VARIANTS; `wf_apply.py batch --note-file note.txt`
+# rotates through them per job so applications aren't byte-identical.

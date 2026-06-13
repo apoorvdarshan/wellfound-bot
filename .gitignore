@@ -6,6 +6,9 @@ captures/
 secrets/
 session_backup/
 
+# Your personal cover note (used by `wf_apply --note-file`). Keep it private.
+note.txt
+
 __pycache__/
 *.pyc
 .venv/

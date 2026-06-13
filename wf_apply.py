@@ -19,11 +19,25 @@ Usage:
 """
 import argparse
 import json
+import re
 import sys
 import time
 from pathlib import Path
 
 import wf_replay as W
+
+
+def load_notes(note, note_file):
+    """Return a list of cover-note variants. A --note-file may hold several
+    variants separated by a line containing only '---'; batch rotates through
+    them per job so applications aren't byte-identical. Falls back to --note.
+    Keep your note file out of git (it's personal) — note.txt is gitignored."""
+    if note_file:
+        text = Path(note_file).read_text(encoding="utf-8")
+        variants = [v.strip() for v in re.split(r"(?m)^---\s*$", text) if v.strip()]
+        if variants:
+            return variants
+    return [note or ""]
 
 
 def template(reqs, op):
@@ -198,16 +212,17 @@ def cmd_apply(capture_dir, job_id, note, answers, send, delay):
         print(f"\n{job_id}: {detail}")
 
 
-def cmd_batch(capture_dir, job_ids, note, send, max_n, delay):
+def cmd_batch(capture_dir, job_ids, notes, send, max_n, delay):
     s, modal_t, apply_t = load_templates(capture_dir)
     if not s:
         return
     job_ids = job_ids[:max_n]
-    print(f"Batch over {len(job_ids)} job(s) (send={send}, delay={delay}s):\n")
+    print(f"Batch over {len(job_ids)} job(s) (send={send}, delay={delay}s, {len(notes)} note variant(s)):\n")
     tally = {}
     for i, jid in enumerate(job_ids, 1):
         if i > 1 and delay:
             time.sleep(delay)
+        note = notes[(i - 1) % len(notes)]  # rotate variants so applies differ
         status, detail = apply_one(s, modal_t, apply_t, jid, note, {}, send)
         tally[status] = tally.get(status, 0) + 1
         icon = {"applied": "✅", "already": "ℹ️", "dry": "•", "needs_answers": "⏭", "blocked": "⛔", "error": "✗"}.get(status, "?")
@@ -231,6 +246,7 @@ def main():
     a = sub.add_parser("apply")
     a.add_argument("--job", required=True)
     a.add_argument("--note", default="")
+    a.add_argument("--note-file", default=None, help="read the cover note from a file (gitignore it)")
     a.add_argument("--answer", dest="answers", action="append", default=[],
                    help='Screening answer as QUESTIONID="text" (repeatable)')
     a.add_argument("--send", action="store_true")
@@ -240,6 +256,8 @@ def main():
     b = sub.add_parser("batch", help="apply to many job ids (from args or stdin)")
     b.add_argument("--ids", default=None, help="comma list of job ids; omit to read stdin")
     b.add_argument("--note", default="")
+    b.add_argument("--note-file", default=None,
+                   help="cover note file; '---' lines separate variants rotated per job")
     b.add_argument("--send", action="store_true")
     b.add_argument("--max", type=int, default=5, help="cap on how many to apply (default 5)")
     b.add_argument("--delay", type=float, default=30.0, help="seconds between jobs (default 30)")
@@ -258,7 +276,8 @@ def main():
         for a_ in args.answers:
             qid, _, val = a_.partition("=")
             answers[qid.strip()] = val
-        cmd_apply(capture_dir, args.job, args.note, answers, args.send, args.delay)
+        note = load_notes(args.note, args.note_file)[0]
+        cmd_apply(capture_dir, args.job, note, answers, args.send, args.delay)
     elif args.cmd == "batch":
         if args.ids:
             ids = [x.strip() for x in args.ids.split(",") if x.strip()]
@@ -267,7 +286,7 @@ def main():
         if not ids:
             print("No job ids given (pass --ids or pipe them in).")
             sys.exit(1)
-        cmd_batch(capture_dir, ids, args.note, args.send, args.max, args.delay)
+        cmd_batch(capture_dir, ids, load_notes(args.note, args.note_file), args.send, args.max, args.delay)
 
 
 if __name__ == "__main__":
