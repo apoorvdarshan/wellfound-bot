@@ -88,22 +88,46 @@ def search(capture_dir, overrides, start_page, max_pages):
     return jobs
 
 
+# Friendly --sort values → Wellfound's sortBy enum.
+SORT_MAP = {"recommended": "RECOMMENDED", "recent": "LAST_POSTED", "active": "LAST_ACTIVE"}
+
+
 def main():
     ap = argparse.ArgumentParser(description="External Wellfound job search (capture-replay).")
     ap.add_argument("--capture", default=None)
     ap.add_argument("--page", type=int, default=1)
     ap.add_argument("--max-pages", type=int, default=3)
-    ap.add_argument("--job-types", default=None, help="comma list, e.g. full_time,contract")
-    ap.add_argument("--remote", default=None, help="remotePreference, e.g. REMOTE_OPEN")
-    ap.add_argument("--salary-min", type=int, default=None)
-    ap.add_argument("--salary-max", type=int, default=None)
-    ap.add_argument("--role-tags", default=None, help="comma list of roleTagIds")
-    ap.add_argument("--location-tags", default=None, help="comma list of locationTagIds")
+    # Tag-based facets — these are tag IDs, not names. Easiest to set them on
+    # the site during a capture; pass here only if you know the IDs.
+    ap.add_argument("--role-tags", help="roleTagIds, comma list")
+    ap.add_argument("--skill-tags", help="skillTagIds, comma list")
+    ap.add_argument("--market-tags", help="marketTagIds, comma list")
+    ap.add_argument("--location-tags", help="locationTagIds, comma list")
+    ap.add_argument("--remote-company-tags", help="remoteCompanyLocationTagIds, comma list")
+    # Value facets.
+    ap.add_argument("--job-types", help="full_time,contract,internship,cofounder")
+    ap.add_argument("--remote", help="remotePreference: REMOTE_OPEN / REMOTE_ONLY / NO_REMOTE")
+    ap.add_argument("--keywords", help="included keywords, comma list")
+    ap.add_argument("--exclude-keywords", help="excluded keywords, comma list")
+    ap.add_argument("--company-sizes", help="SIZE_1_10,SIZE_11_50,SIZE_51_200,…")
+    ap.add_argument("--investment-stages", help="SEED_STAGE,SERIES_A,SERIES_B,GROWTH,IPO,ACQUIRED")
+    ap.add_argument("--salary-min", type=int)
+    ap.add_argument("--salary-max", type=int)
+    ap.add_argument("--currency", help="currencyCode, e.g. USD")
+    ap.add_argument("--equity-min", type=float)
+    ap.add_argument("--equity-max", type=float)
+    ap.add_argument("--years-min", type=int)
+    ap.add_argument("--years-max", type=int)
+    # Boolean filter switches.
+    ap.add_argument("--mostly-remote", action="store_true", help="distributed/remote-culture companies only")
+    ap.add_argument("--responsive", action="store_true", help="highly-responsive companies only")
+    ap.add_argument("--visa", action="store_true", help="visa-sponsoring companies only")
+    ap.add_argument("--hide-external", action="store_true", help="hide off-platform (external-apply) jobs")
+    ap.add_argument("--include-no-salary", action="store_true", help="include jobs without a listed salary")
+    ap.add_argument("--sort", choices=tuple(SORT_MAP), help="recommended / recent / active")
+    # Client-side conveniences.
     ap.add_argument("--exclude-applied", action="store_true")
-    ap.add_argument("--native-only", action="store_true",
-                    help="drop external-ATS jobs (the only ones our auto-apply can't do)")
-    ap.add_argument("--sort", choices=("recommended", "recent", "active"), default="recommended",
-                    help="recommended=API order, recent=liveStartAt, active=lastRespondedAt")
+    ap.add_argument("--native-only", action="store_true", help="also drop external-ATS jobs client-side")
     ap.add_argument("--ids-only", action="store_true", help="print just job ids (for piping)")
     args = ap.parse_args()
 
@@ -112,27 +136,40 @@ def main():
         print("No capture found. Run `python record_api.py` first.")
         sys.exit(1)
 
-    overrides = {}
-    if args.job_types:
-        overrides["jobTypes"] = args.job_types.split(",")
-    if args.remote:
-        overrides["remotePreference"] = args.remote
-    if args.salary_min is not None or args.salary_max is not None:
-        overrides["salary"] = {"min": args.salary_min, "max": args.salary_max}
-    if args.role_tags:
-        overrides["roleTagIds"] = args.role_tags.split(",")
-    if args.location_tags:
-        overrides["locationTagIds"] = args.location_tags.split(",")
+    def csv(s):
+        return [x.strip() for x in s.split(",") if x.strip()]
 
-    jobs = search(cap, overrides, args.page, args.max_pages)
+    o = {}
+    if args.role_tags: o["roleTagIds"] = csv(args.role_tags)
+    if args.skill_tags: o["skillTagIds"] = csv(args.skill_tags)
+    if args.market_tags: o["marketTagIds"] = csv(args.market_tags)
+    if args.location_tags: o["locationTagIds"] = csv(args.location_tags)
+    if args.remote_company_tags: o["remoteCompanyLocationTagIds"] = csv(args.remote_company_tags)
+    if args.job_types: o["jobTypes"] = csv(args.job_types)
+    if args.remote: o["remotePreference"] = args.remote
+    if args.keywords: o["keywords"] = csv(args.keywords)
+    if args.exclude_keywords: o["excludedKeywords"] = csv(args.exclude_keywords)
+    if args.company_sizes: o["companySizes"] = csv(args.company_sizes)
+    if args.investment_stages: o["investmentStages"] = csv(args.investment_stages)
+    if args.salary_min is not None or args.salary_max is not None:
+        o["salary"] = {"min": args.salary_min, "max": args.salary_max}
+    if args.currency: o["currencyCode"] = args.currency
+    if args.equity_min is not None or args.equity_max is not None:
+        o["equity"] = {"min": args.equity_min, "max": args.equity_max}
+    if args.years_min is not None or args.years_max is not None:
+        o["yearsExperience"] = {"min": args.years_min, "max": args.years_max}
+    if args.mostly_remote: o["mostlyOrFullyRemote"] = True
+    if args.responsive: o["highlyResponsiveToIncomingApplications"] = True
+    if args.visa: o["allowInternationalApplicants"] = True
+    if args.hide_external: o["hideOffPlatformJobs"] = True
+    if args.include_no_salary: o["includeJobsWithoutSalary"] = True
+    if args.sort: o["sortBy"] = SORT_MAP[args.sort]
+
+    jobs = search(cap, o, args.page, args.max_pages)
     if args.exclude_applied:
         jobs = [j for j in jobs if not j["applied"]]
     if args.native_only:
         jobs = [j for j in jobs if not j["ats"]]  # keep Wellfound-native apply only
-    if args.sort == "recent":
-        jobs.sort(key=lambda j: j["live_at"], reverse=True)
-    elif args.sort == "active":
-        jobs.sort(key=lambda j: j["active_at"], reverse=True)
 
     if args.ids_only:
         for j in jobs:

@@ -119,11 +119,24 @@ python wf_search.py --max-pages 5 --exclude-applied --remote REMOTE_OPEN --salar
 python wf_search.py --role-tags 157714,103480 --location-tags 2203
 ```
 
-Filters: `--job-types`, `--remote`, `--salary-min/--salary-max`,
-`--role-tags`, `--location-tags`, `--page`, `--max-pages`. **Roles and
-locations are tag IDs, not free text** — the simplest way to set them is to
-apply your filters on wellfound.com while `record_api.py` records; the
-capture then holds your exact filter and `wf_search` just paginates it.
+Every Wellfound filter maps to a flag (server-side, the real fields):
+
+- **Facets (tag IDs):** `--role-tags`, `--skill-tags`, `--market-tags`,
+  `--location-tags`, `--remote-company-tags`
+- **Values:** `--job-types`, `--remote`, `--keywords`, `--exclude-keywords`,
+  `--company-sizes` (`SIZE_1_10`…), `--investment-stages` (`SEED_STAGE`,
+  `SERIES_A`…), `--salary-min/--salary-max`, `--currency`,
+  `--equity-min/--equity-max`, `--years-min/--years-max`
+- **Switches:** `--mostly-remote`, `--responsive`, `--visa`,
+  `--hide-external`, `--include-no-salary`
+- **Sort:** `--sort recommended|recent|active`  (→ `sortBy`)
+- **Pagination/convenience:** `--page`, `--max-pages`, `--exclude-applied`,
+  `--native-only`, `--ids-only`
+
+**Tag-based facets (role/skill/market/location) are IDs, not names.** The
+simplest way to set them is to apply your filters on wellfound.com while
+`record_api.py` records — the capture then holds your exact filter and
+`wf_search` paginates it, with flags to tweak any field on top.
 
 Chain search → batch apply (capped + spaced; dry-run unless `--send`):
 
