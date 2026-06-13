@@ -26,6 +26,8 @@ It walks the **full spectrum of web automation**, so it doubles as a learning re
 > ### ⚖️ Disclaimer — please read
 > This is an **educational, personal-use** project for automating **your own** account. Automating Wellfound is against their Terms of Service and can get an account suspended; you use it **at your own risk**. **Do not** mass-apply, scrape at scale, or operate accounts that aren't yours. Built to study web automation and API reverse-engineering — be a responsible human about it.
 
+> 🤖 **Driving this with an AI agent?** Read **[INSTRUCTIONS.md](INSTRUCTIONS.md)** — a self-contained, end-to-end runbook (commands, the reverse-engineered API, every filter field, a decision tree, and troubleshooting). An agent can act on it immediately without reading the source.
+
 ## ⚠️ Read this first — Wellfound uses DataDome
 
 Wellfound runs **DataDome**, a serious commercial anti-bot. Testing showed:
