@@ -42,6 +42,12 @@ def collect(resp_json):
                 "applied": bool(j.get("currentUserApplied")),
                 "startupId": sid,
                 "company": node.get("name"),
+                # Used for client-side sort + the native-apply filter. An
+                # external atsSource means you'd apply on the company's own
+                # site — which our CreateJobApplication can't do anyway.
+                "ats": j.get("atsSource"),
+                "live_at": j.get("liveStartAt") or 0,
+                "active_at": j.get("lastRespondedAt") or 0,
             })
     return jobs, jr.get("hasNextPage"), jr.get("totalStartupCount")
 
@@ -94,6 +100,10 @@ def main():
     ap.add_argument("--role-tags", default=None, help="comma list of roleTagIds")
     ap.add_argument("--location-tags", default=None, help="comma list of locationTagIds")
     ap.add_argument("--exclude-applied", action="store_true")
+    ap.add_argument("--native-only", action="store_true",
+                    help="drop external-ATS jobs (the only ones our auto-apply can't do)")
+    ap.add_argument("--sort", choices=("recommended", "recent", "active"), default="recommended",
+                    help="recommended=API order, recent=liveStartAt, active=lastRespondedAt")
     ap.add_argument("--ids-only", action="store_true", help="print just job ids (for piping)")
     args = ap.parse_args()
 
@@ -117,6 +127,12 @@ def main():
     jobs = search(cap, overrides, args.page, args.max_pages)
     if args.exclude_applied:
         jobs = [j for j in jobs if not j["applied"]]
+    if args.native_only:
+        jobs = [j for j in jobs if not j["ats"]]  # keep Wellfound-native apply only
+    if args.sort == "recent":
+        jobs.sort(key=lambda j: j["live_at"], reverse=True)
+    elif args.sort == "active":
+        jobs.sort(key=lambda j: j["active_at"], reverse=True)
 
     if args.ids_only:
         for j in jobs:
