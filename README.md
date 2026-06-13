@@ -31,6 +31,7 @@ to catch. If you let the tool drive the browser (`run.py`), keep it
 | `login.py` | Open Chrome once, log in by hand; session saved into `user_data/`. Auto-detects login. |
 | `run.py` | **Higher risk.** Drives the browser to walk jobs with human-like clicks. Headed + dry-run only. |
 | `verify_session.py` | Headed read-only check that the saved session loads the feed. |
+| `record_api.py` | Read-only API recorder: logs the GraphQL/XHR calls Wellfound fires while you browse, to reverse-engineer the apply API. |
 | `config.py` | Your search URL, batch size, delays, dry-run toggle. |
 | `wellfound/human.py` | The "click properly" logic — motion, hovers, timing. |
 | `wellfound/browser.py` | Persistent real-Chrome profile, minimal/coherent fingerprint. |
@@ -48,6 +49,24 @@ step recorded, switch to the terminal and press **Enter**; type **q** to
 finish. Each capture saves the DOM + screenshot into
 `captures/assist-<timestamp>/`, building the `flow.jsonl` trace you feed
 to an agent. DataDome only ever sees your normal manual browsing.
+
+## Reverse-engineering the API (read-only)
+
+```bash
+python record_api.py     # then browse + apply by hand, Ctrl-C to stop
+```
+
+This logs every GraphQL/XHR request + response Wellfound makes while *you*
+use it, into `captures/api-<timestamp>/requests.jsonl` (plus a gitignored
+`cookies.json`). It's the safe way to *see* the apply API.
+
+**Don't replay it from a plain script.** Wellfound's DataDome also guards
+the API and fingerprints the TLS handshake (JA3) and the `datadome`
+cookie binding — a Python `requests` call with your cookies has a
+non-Chrome TLS fingerprint and tends to get blocked *faster* than a
+browser. If you want to act on the API, the safe path is to run `fetch()`
+**inside the real Chrome** (correct TLS + live `datadome` cookie +
+session), not an external client.
 
 ## Setup
 
