@@ -1,8 +1,9 @@
 # Your saved login session — treat like a password, never commit.
 user_data/
 
-# Captured runs (HTML/screenshots can be large and may contain personal data).
+# Captured runs (HTML/screenshots + cookies; contain live session secrets).
 captures/
+secrets/
 
 __pycache__/
 *.pyc

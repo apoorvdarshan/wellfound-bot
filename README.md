@@ -32,6 +32,7 @@ to catch. If you let the tool drive the browser (`run.py`), keep it
 | `run.py` | **Higher risk.** Drives the browser to walk jobs with human-like clicks. Headed + dry-run only. |
 | `verify_session.py` | Headed read-only check that the saved session loads the feed. |
 | `record_api.py` | Read-only API recorder: logs the GraphQL/XHR calls Wellfound fires while you browse, to reverse-engineer the apply API. |
+| `wf_replay.py` | External replay client: re-sends a captured API request with a Chrome TLS/JA3 fingerprint + your cookies. **Highest risk**; dry-run default. |
 | `config.py` | Your search URL, batch size, delays, dry-run toggle. |
 | `wellfound/human.py` | The "click properly" logic — motion, hovers, timing. |
 | `wellfound/browser.py` | Persistent real-Chrome profile, minimal/coherent fingerprint. |
@@ -67,6 +68,27 @@ non-Chrome TLS fingerprint and tends to get blocked *faster* than a
 browser. If you want to act on the API, the safe path is to run `fetch()`
 **inside the real Chrome** (correct TLS + live `datadome` cookie +
 session), not an external client.
+
+### External replay (`wf_replay.py`) — highest risk
+
+If you choose the external route anyway, the least-bad version is to
+replay Wellfound's *real* captured request (not a guess) with a Chrome
+TLS fingerprint. Flow:
+
+```bash
+python record_api.py                       # capture: do ONE manual apply, Ctrl-C
+python wf_replay.py list                   # find the apply request's index
+python wf_replay.py replay --index 7       # DRY-RUN: prints what it would send
+python wf_replay.py replay --index 7 \
+    --set variables.jobId=12345 --send     # actually send (for a new job id)
+```
+
+`wf_replay.py` impersonates Chrome's JA3 (`curl_cffi`), loads your captured
+cookies (incl. `datadome`), and replays the captured headers + body, with
+`--set` to edit GraphQL variables. It defaults to dry-run; `--send` fires
+it. If DataDome detects the external client it returns a CAPTCHA/`datadome`
+body, which the script flags. **Keep volume tiny** — this is the easiest
+mode to get an account flagged.
 
 ## Setup
 
