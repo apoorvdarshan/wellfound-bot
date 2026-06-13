@@ -1,11 +1,30 @@
-# wellfound-bot
+<h1 align="center">🎯 wellfound-bot</h1>
 
-Human-like Wellfound automation in Python + Playwright. Log in once in a
-real Chrome window, reuse that session forever, and **capture the full
-click-flow + page HTML of each step** so you can hand it to AI agents.
+<p align="center">
+  <b>Automate your own Wellfound job hunt — search every filter, then auto-apply, in one command.</b><br>
+  A hands-on tour of modern web automation: human-like browser control → read-only API capture → a pure-HTTP client that does the work invisibly.
+</p>
 
-It is built to *not* look like a bot: real mouse movement, hovers,
-think-pauses, randomized timing, rate limits, and a dry-run default.
+<p align="center">
+  <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License">
+  <img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python 3.10+">
+  <img src="https://img.shields.io/badge/Playwright-2EAD33?logo=playwright&logoColor=white" alt="Playwright">
+  <img src="https://img.shields.io/badge/PRs-welcome-brightgreen" alt="PRs welcome">
+</p>
+
+---
+
+**wellfound-bot** reverse-engineers how Wellfound (ex-AngelList Talent) works under the hood and turns your job hunt into a single command. Tell it *"apply to 5 remote React jobs with pay"* and it resolves your filters, searches, and applies — no manual clicking.
+
+It walks the **full spectrum of web automation**, so it doubles as a learning resource:
+
+- 🖱️ **Human-like browser automation** (Playwright) — curved mouse paths, hovers, think-pauses, randomized timing, rate limits.
+- 🧩 **Read-only API capture** — attach to your *own* real Chrome over CDP and record the GraphQL calls the site makes as you browse (`navigator.webdriver` stays false).
+- ⚡ **External API client** — replay those calls over **pure HTTP** with a Chrome TLS/JA3 fingerprint (`curl_cffi`). No browser, fully invisible.
+- 🧠 **One-command agent** — name-based filters (`--skills React`), full search facets, and batch auto-apply with caps + delays. Optional natural-language mode via Claude.
+
+> ### ⚖️ Disclaimer — please read
+> This is an **educational, personal-use** project for automating **your own** account. Automating Wellfound is against their Terms of Service and can get an account suspended; you use it **at your own risk**. **Do not** mass-apply, scrape at scale, or operate accounts that aren't yours. Built to study web automation and API reverse-engineering — be a responsible human about it.
 
 ## ⚠️ Read this first — Wellfound uses DataDome
 
