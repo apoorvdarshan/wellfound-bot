@@ -22,6 +22,7 @@ import sys
 from pathlib import Path
 
 import wf_replay as W
+import wf_resolve as R
 from wf_apply import template
 
 
@@ -52,7 +53,7 @@ def collect(resp_json):
     return jobs, jr.get("hasNextPage"), jr.get("totalStartupCount")
 
 
-def search(capture_dir, overrides, start_page, max_pages):
+def search(capture_dir, overrides, start_page, max_pages, clean=True):
     reqs = W.load_requests(capture_dir)
     tmpl = template(reqs, "JobSearchResultsX")
     if not tmpl:
@@ -61,7 +62,11 @@ def search(capture_dir, overrides, start_page, max_pages):
         return []
 
     base = json.loads(tmpl["post_data"])
-    fci = dict(base["variables"]["filterConfigurationInput"])
+    # clean=True builds the filter from ONLY what you asked for (right for
+    # constructing a fresh query); clean=False inherits the exact filter you
+    # set on the site (right for paginating it).
+    captured = base["variables"].get("filterConfigurationInput", {})
+    fci = {} if clean else dict(captured)
     fci.update(overrides)
     s = W.build_session(W.load_cookies(capture_dir))
     method, url, headers, _ = W.reconstruct(tmpl, [])
@@ -104,6 +109,10 @@ def main():
     ap.add_argument("--market-tags", help="marketTagIds, comma list")
     ap.add_argument("--location-tags", help="locationTagIds, comma list")
     ap.add_argument("--remote-company-tags", help="remoteCompanyLocationTagIds, comma list")
+    # Name-based facets (resolved to IDs via the autocomplete API) — friendlier.
+    ap.add_argument("--skills", help="skill NAMES, comma list (e.g. React,iOS)")
+    ap.add_argument("--markets", help="market NAMES, comma list (e.g. Healthcare,Fintech)")
+    ap.add_argument("--locations", help="location NAMES, comma list (e.g. \"San Francisco\",Bangalore)")
     # Value facets.
     ap.add_argument("--job-types", help="full_time,contract,internship,cofounder")
     ap.add_argument("--remote", help="remotePreference: REMOTE_OPEN / REMOTE_ONLY / NO_REMOTE")
@@ -128,6 +137,8 @@ def main():
     # Client-side conveniences.
     ap.add_argument("--exclude-applied", action="store_true")
     ap.add_argument("--native-only", action="store_true", help="also drop external-ATS jobs client-side")
+    ap.add_argument("--from-capture", action="store_true",
+                    help="inherit the exact filter you set on the site (else build only from flags)")
     ap.add_argument("--ids-only", action="store_true", help="print just job ids (for piping)")
     args = ap.parse_args()
 
@@ -164,8 +175,12 @@ def main():
     if args.hide_external: o["hideOffPlatformJobs"] = True
     if args.include_no_salary: o["includeJobsWithoutSalary"] = True
     if args.sort: o["sortBy"] = SORT_MAP[args.sort]
+    # Name-based facets resolve to tag IDs and override the raw-id versions.
+    if args.skills: o["skillTagIds"] = R.resolve_many(cap, "skill", csv(args.skills))
+    if args.markets: o["marketTagIds"] = R.resolve_many(cap, "market", csv(args.markets))
+    if args.locations: o["locationTagIds"] = R.resolve_many(cap, "location", csv(args.locations))
 
-    jobs = search(cap, o, args.page, args.max_pages)
+    jobs = search(cap, o, args.page, args.max_pages, clean=not args.from_capture)
     if args.exclude_applied:
         jobs = [j for j in jobs if not j["applied"]]
     if args.native_only:

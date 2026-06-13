@@ -34,7 +34,9 @@ to catch. If you let the tool drive the browser (`run.py`), keep it
 | `record_api.py` | Read-only API recorder: logs the GraphQL/XHR calls Wellfound fires while you browse, to reverse-engineer the apply API. |
 | `wf_replay.py` | External replay client: re-sends a captured API request with a Chrome TLS/JA3 fingerprint + your cookies. **Highest risk**; dry-run default. |
 | `wf_apply.py` | External auto-apply: `apply` one job or `batch` many; chains `JobApplicationModal` → `CreateJobApplication`, handling `startupId` + screening questions. **Highest risk**; dry-run default. |
-| `wf_search.py` | External job search: replays `JobSearchResultsX` with filters + pagination, returns jobs (id, startupId, title, applied). Read-only. |
+| `wf_search.py` | External job search: filters + pagination, by tag IDs **or names** (`--skills React`). Clean filter by default; `--from-capture` to paginate your site filter. Read-only. |
+| `wf_resolve.py` | Resolves filter NAMES → tag IDs via the autocomplete API (skills/markets/locations). |
+| `wf_agent.py` | One-shot agent: search by name/filters → auto-apply (batch). Plain flags now; natural-language `--query` if `anthropic` + `ANTHROPIC_API_KEY`. |
 | `config.py` | Your search URL, batch size, delays, dry-run toggle. |
 | `wellfound/human.py` | The "click properly" logic — motion, hovers, timing. |
 | `wellfound/browser.py` | Persistent real-Chrome profile, minimal/coherent fingerprint. |
@@ -143,6 +145,26 @@ Chain search → batch apply (capped + spaced; dry-run unless `--send`):
 ```bash
 python wf_search.py --ids-only --exclude-applied | python wf_apply.py batch --max 5 --delay 45 --send
 ```
+
+### The agent — search + apply in one command (`wf_agent.py`)
+
+The whole thing in one shot. Filters by **name** (resolved to tag IDs),
+searches with a clean filter, keeps native + not-yet-applied jobs, and
+batch-applies — dry-run unless `--send`:
+
+```bash
+# flags (works now, no API key):
+python wf_agent.py --skills React,Node --remote --locations "San Francisco" --max 5        # dry-run
+python wf_agent.py --skills React --remote --max 5 --send                                  # apply for real
+
+# natural language (needs: pip install anthropic + ANTHROPIC_API_KEY):
+python wf_agent.py --query "remote react jobs in SF, seed/series-A, apply to 5" --send
+```
+
+Without an API key, the natural-language layer is just **Claude Code
+itself** — tell it your criteria and it runs the same `wf_resolve` →
+`wf_search` → `wf_apply` pipeline. Roles are a fixed Wellfound list (no
+typeahead), so use **skills** or **keywords** for them.
 
 ## Setup
 
