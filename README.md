@@ -33,6 +33,7 @@ to catch. If you let the tool drive the browser (`run.py`), keep it
 | `verify_session.py` | Headed read-only check that the saved session loads the feed. |
 | `record_api.py` | Read-only API recorder: logs the GraphQL/XHR calls Wellfound fires while you browse, to reverse-engineer the apply API. |
 | `wf_replay.py` | External replay client: re-sends a captured API request with a Chrome TLS/JA3 fingerprint + your cookies. **Highest risk**; dry-run default. |
+| `wf_apply.py` | External auto-apply: chains `JobApplicationModal` → `CreateJobApplication` for any job id, handling `startupId` + screening questions. **Highest risk**; dry-run default. |
 | `config.py` | Your search URL, batch size, delays, dry-run toggle. |
 | `wellfound/human.py` | The "click properly" logic — motion, hovers, timing. |
 | `wellfound/browser.py` | Persistent real-Chrome profile, minimal/coherent fingerprint. |
@@ -89,6 +90,25 @@ cookies (incl. `datadome`), and replays the captured headers + body, with
 it. If DataDome detects the external client it returns a CAPTCHA/`datadome`
 body, which the script flags. **Keep volume tiny** — this is the easiest
 mode to get an account flagged.
+
+### External auto-apply (`wf_apply.py`)
+
+Higher-level than raw replay: give it a job id and it does the two-step
+flow itself.
+
+```bash
+python wf_apply.py jobs                          # job ids found in the capture
+python wf_apply.py apply --job 4174674            # DRY-RUN: reads modal, prints the plan
+python wf_apply.py apply --job 4174674 --note "Keen to contribute" --send
+python wf_apply.py apply --job 4174674 --answer 263758="..." --send   # answer a screening Q
+```
+
+It fetches `JobApplicationModal` (read-only) to resolve `startupId` and any
+screening questions, refuses to apply if a **required** question is
+unanswered, then sends `CreateJobApplication`. Verified against Wellfound:
+the external client gets an HTTP 200 application response (not a DataDome
+block). Still the riskiest mode — apply to a few, slowly, and re-capture
+when the signature ages out.
 
 ## Setup
 
