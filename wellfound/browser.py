@@ -26,7 +26,11 @@ _STEALTH_JS = """
 Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
 Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
 Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
-window.chrome = window.chrome || { runtime: {} };
+// Chromium ships a bare `window.chrome` with no `.runtime`; a missing
+// runtime is a classic headless tell, so set it explicitly rather than
+// relying on `window.chrome || {...}` (which keeps the empty object).
+window.chrome = window.chrome || {};
+window.chrome.runtime = window.chrome.runtime || {};
 """
 
 _LAUNCH_ARGS = [
