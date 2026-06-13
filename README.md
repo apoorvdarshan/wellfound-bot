@@ -38,8 +38,10 @@ Google, magic link). When you see your dashboard, press Enter in the
 terminal. Your session is saved to `user_data/`.
 
 > The first login **must** be a visible window — you can't type a
-> password into an invisible one. After this, you may set
-> `HEADLESS = True` in `config.py` for later runs.
+> password into an invisible one. **Keep runs headed** for best stealth:
+> headless Chrome leaks `HeadlessChrome` in its user-agent, which is easy
+> to flag. `HEADLESS = True` exists in `config.py` but warns you for this
+> reason.
 
 ## 2. Capture a run
 
@@ -73,6 +75,25 @@ When the captures look right, set `DRY_RUN = False` in `config.py` (and
 optionally a `DEFAULT_MESSAGE`). Now `run.py` clicks submit too. Keep
 `MAX_JOBS_PER_RUN` small and run a few times a day rather than one huge
 batch.
+
+## Staying undetected
+
+The disguise is **being a real Chrome, not a patched one.** The bot uses
+your installed Chrome binary with a persistent profile, turns off the
+automation flag (so `navigator.webdriver` is its natural `false`), and
+otherwise leaves the fingerprint *untouched*. It deliberately does **not**
+fake the user-agent, plugins, languages, or timezone — those would
+disagree with Chrome's real User-Agent Client Hints and become their own
+tell. Input is human-paced (curved continuous mouse motion, real press
+durations, per-character typing, randomized think-time), and runs are
+rate-limited and capped. Run headed for the cleanest fingerprint.
+
+## Tests
+
+- `python smoke_test.py` — checks the browser, masking, human helpers,
+  and capture (no login needed).
+- `python flow_test.py` — drives `run.py`'s real flow logic against local
+  pages that mimic Wellfound's feed + apply modal (no login, no network).
 
 ## Notes & limits
 

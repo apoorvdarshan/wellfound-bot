@@ -4,7 +4,10 @@ and the full page HTML at that moment.
 
 The capture is the point of this whole project. When a selector stops
 matching (Wellfound's DOM shifts often), the saved HTML is exactly what
-you — or an agent — read to find the new selector.
+you — or an agent — read to find the new selector. So when a capture
+*fails* (e.g. the page is mid-navigation), we record the error in the
+log rather than silently dropping it — a missing capture you don't know
+about is worse than one you do.
 """
 import json
 import time
@@ -43,20 +46,20 @@ class FlowRecorder:
         self.step += 1
         n = f"{self.step:03d}"
 
-        shot_name = None
+        shot_name, shot_error = None, None
         try:
             page.screenshot(path=str(self.dir / f"{n}.png"))
             shot_name = f"{n}.png"
-        except Exception:
-            pass
+        except Exception as e:
+            shot_error = f"{type(e).__name__}: {e}"
 
-        html_name = None
+        html_name, html_error = None, None
         if save_html:
             try:
                 (self.dir / f"{n}.html").write_text(page.content(), encoding="utf-8")
                 html_name = f"{n}.html"
-            except Exception:
-                pass
+            except Exception as e:
+                html_error = f"{type(e).__name__}: {e}"
 
         entry = {
             "step": self.step,
@@ -69,6 +72,13 @@ class FlowRecorder:
             "screenshot": shot_name,
             "html": html_name,
         }
+        # Only surface capture errors when they actually happen, to keep
+        # the common-case rows clean.
+        if shot_error:
+            entry["screenshot_error"] = shot_error
+        if html_error:
+            entry["html_error"] = html_error
+
         with self.log_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(entry) + "\n")
         return entry

@@ -6,10 +6,16 @@ between actions, whole strings typed in a single keystroke, and a mouse
 that teleports instead of moving. Every helper here adds realistic
 timing and motion so the activity reads as a person, not a macro.
 """
+import math
 import random
 import time
 
 from playwright.sync_api import Locator, Page
+
+# Last known cursor position, tracked across calls so each move starts
+# where the previous one ended — continuous motion, never a teleport to
+# a fresh random point. Seeded to a plausible mid-screen spot.
+_cursor = {"x": 640.0, "y": 360.0}
 
 
 def human_pause(lo: float = 0.4, hi: float = 1.2) -> None:
@@ -34,25 +40,27 @@ def _point_in(box: dict, bias: float = 0.5, spread: float = 0.22):
 
 
 def human_mouse_to(page: Page, x: float, y: float) -> None:
-    """Move the cursor to (x, y) through a couple of jittered waypoints.
+    """Glide the cursor from its last position to (x, y).
 
-    Playwright's mouse.move with steps draws a straight line; routing it
-    through intermediate points with perpendicular jitter makes the path
-    curved and uneven, the way a real hand moves.
+    The path starts at the real previous position (no teleport), bends
+    through one or two eased waypoints with jitter that shrinks as it
+    nears the target, and uses more steps for longer travel — roughly the
+    velocity profile of a hand.
     """
-    # Begin from a random nearby point (we don't know the true position).
-    px = x + random.uniform(-180, 180)
-    py = y + random.uniform(-140, 140)
-    page.mouse.move(px, py, steps=random.randint(4, 8))
+    sx, sy = _cursor["x"], _cursor["y"]
+    dist = math.hypot(x - sx, y - sy)
+    waypoints = 1 if dist < 250 else 2
 
-    for i in range(random.randint(1, 2)):
-        t = (i + 1) / 3
-        wx = px + (x - px) * t + random.uniform(-30, 30)
-        wy = py + (y - py) * t + random.uniform(-25, 25)
-        page.mouse.move(wx, wy, steps=random.randint(5, 10))
-        human_pause(0.02, 0.12)
+    for i in range(waypoints):
+        t = (i + 1) / (waypoints + 1)
+        jitter = (1 - t) * min(40.0, dist * 0.15)
+        wx = sx + (x - sx) * t + random.uniform(-jitter, jitter)
+        wy = sy + (y - sy) * t + random.uniform(-jitter, jitter)
+        page.mouse.move(wx, wy, steps=random.randint(5, 12))
+        human_pause(0.02, 0.10)
 
-    page.mouse.move(x, y, steps=random.randint(12, 26))
+    page.mouse.move(x, y, steps=max(8, int(dist / 12)))
+    _cursor["x"], _cursor["y"] = x, y
 
 
 def human_click(page: Page, locator: Locator, *, settle: bool = True) -> None:

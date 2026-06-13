@@ -1,38 +1,28 @@
 """Launch a persistent Chrome profile.
 
-Persisting the profile does two jobs at once: your login survives
-between runs (no re-auth), and the browser fingerprint looks like a
-normal returning user instead of a fresh automation sandbox.
+Stealth philosophy (informed by review): a *real* Chrome is the best
+disguise, so we do as little as possible. We use the installed Chrome
+binary, turn off the automation flags that set `navigator.webdriver`,
+and otherwise leave the fingerprint untouched.
+
+We deliberately do NOT inject fake user-agent strings, plugin lists,
+languages, or locale. Those disagree with Chrome's real User-Agent
+Client Hints and become their own tell — patching less is safer than
+patching more. The one unavoidable weakness is headless mode, which
+leaks "HeadlessChrome" in the UA; run headed for real use.
 """
+import sys
 from pathlib import Path
 
-from playwright.sync_api import Playwright
+from playwright.sync_api import Error as PWError, Playwright
 
 # Stored next to the project; gitignored because it holds your session
 # cookies — treat this folder like a password.
 USER_DATA_DIR = Path(__file__).resolve().parent.parent / "user_data"
 
-# A realistic, current desktop Chrome UA. Bump this every few months so
-# it doesn't drift far behind the real Chrome release.
-USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/126.0.0.0 Safari/537.36"
-)
-
-# Runs before any page JS, hiding the tells sites probe for to detect
-# automation (navigator.webdriver, empty plugin list, missing chrome obj).
-_STEALTH_JS = """
-Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
-Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
-// Chromium ships a bare `window.chrome` with no `.runtime`; a missing
-// runtime is a classic headless tell, so set it explicitly rather than
-// relying on `window.chrome || {...}` (which keeps the empty object).
-window.chrome = window.chrome || {};
-window.chrome.runtime = window.chrome.runtime || {};
-"""
-
+# Only the automation tells we can remove *coherently*. Disabling
+# AutomationControlled makes navigator.webdriver report its natural
+# `false`, with no JS patching that could contradict client hints.
 _LAUNCH_ARGS = [
     "--disable-blink-features=AutomationControlled",
     "--no-default-browser-check",
@@ -41,29 +31,39 @@ _LAUNCH_ARGS = [
 
 
 def launch_context(playwright: Playwright, *, headless: bool = False):
-    """Open the persistent context, preferring real Chrome over Chromium.
+    """Open the persistent context using the real installed Chrome.
 
-    Real Chrome (channel="chrome") has a cleaner fingerprint than the
-    bundled Chromium, but isn't always installed — fall back gracefully.
+    Falls back to Playwright's bundled Chromium only if Chrome is missing
+    — and says so loudly, because Chromium's fingerprint is weaker.
     """
     USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
-    common = dict(
+
+    if headless:
+        print(
+            "  ! HEADLESS=True: headless Chrome leaks 'HeadlessChrome' in its\n"
+            "    user-agent and is easier to flag. Run headed for best stealth.",
+            file=sys.stderr,
+        )
+
+    opts = dict(
         user_data_dir=str(USER_DATA_DIR),
         headless=headless,
         args=_LAUNCH_ARGS,
-        user_agent=USER_AGENT,
-        viewport={"width": 1366, "height": 850},
-        locale="en-US",
-        timezone_id="America/New_York",
         ignore_default_args=["--enable-automation"],
+        no_viewport=True,  # inherit the real window size, not a forced box
     )
 
     try:
-        context = playwright.chromium.launch_persistent_context(channel="chrome", **common)
-    except Exception:
-        # Chrome not present — use Playwright's bundled Chromium instead.
-        context = playwright.chromium.launch_persistent_context(**common)
+        context = playwright.chromium.launch_persistent_context(channel="chrome", **opts)
+    except PWError as e:
+        first_line = str(e).splitlines()[0][:120]
+        print(
+            f"  ! Real Chrome unavailable ({first_line}); falling back to bundled\n"
+            "    Chromium, which has a weaker fingerprint. Install Google Chrome\n"
+            "    for better stealth.",
+            file=sys.stderr,
+        )
+        context = playwright.chromium.launch_persistent_context(**opts)
 
-    context.add_init_script(_STEALTH_JS)
     context.set_default_timeout(30_000)
     return context

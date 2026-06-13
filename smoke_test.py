@@ -3,9 +3,14 @@
 Verifies the machinery this project depends on, against a local HTML
 page so it needs no network and touches no real site:
   * the persistent Chrome context launches,
-  * the anti-fingerprint masking actually takes effect,
+  * navigator.webdriver is not exposed,
   * human_click / human_type / human_scroll do what they claim,
   * FlowRecorder writes its screenshot / HTML / jsonl.
+
+It also PRINTS the live fingerprint (UA, languages, plugins) as
+information rather than asserting specific values — because the whole
+point of the stealth rework is that we no longer fake those; they come
+from the real browser and depend on the OS and headed/headless mode.
 
 It does NOT (and cannot) verify Wellfound's live apply selectors — those
 need a real logged-in session. Run with:  .venv/bin/python smoke_test.py
@@ -51,19 +56,24 @@ def main():
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
         page.goto(file_url, wait_until="domcontentloaded")
 
-        print("\nAnti-detection masking:")
-        wd = page.evaluate("() => navigator.webdriver")
-        check("navigator.webdriver hidden", wd in (None, False), f"value={wd!r}")
-        langs = page.evaluate("() => navigator.languages")
-        check("navigator.languages spoofed", list(langs or []) == ["en-US", "en"], str(langs))
-        plugins = page.evaluate("() => navigator.plugins.length")
-        check("navigator.plugins non-empty", bool(plugins), f"len={plugins}")
-        has_chrome = page.evaluate("() => !!(window.chrome && window.chrome.runtime)")
-        check("window.chrome present", has_chrome)
+        # Informational: we no longer fake these — report the real values.
         ua = page.evaluate("() => navigator.userAgent")
-        check("custom user-agent applied", "Chrome/126" in ua, ua.split(") ")[-1])
+        print("\nLive fingerprint (informational, not asserted):")
+        print(f"    user-agent : {ua}")
+        print(f"    headless tell present : {'HeadlessChrome' in ua}"
+              "  (expected in this headless test; run headed for real use)")
+        print(f"    navigator.languages   : {page.evaluate('() => navigator.languages')}")
+        print(f"    navigator.plugins.len : {page.evaluate('() => navigator.plugins.length')}")
+        print(f"    window.chrome.runtime : {page.evaluate('() => !!(window.chrome && window.chrome.runtime)')}")
 
-        print("\nHuman-like interactions:")
+        print("\nAnti-detection (asserted):")
+        wd = page.evaluate("() => navigator.webdriver")
+        # Real Chrome with AutomationControlled disabled reports `false`;
+        # what we must never see is `true`.
+        check("navigator.webdriver is not exposed as true", wd in (None, False), f"value={wd!r}")
+        check("user-agent is not a generic non-Chrome string", "Chrome" in ua)
+
+        print("\nHuman-like interactions (asserted):")
         human.human_click(page, page.locator("#btn"))
         out = page.locator("#out").inner_text()
         check("human_click registered the click", out == "clicked", out)
@@ -78,7 +88,7 @@ def main():
         after = page.evaluate("() => window.scrollY")
         check("human_scroll moved the page", after > before + 100, f"{before}->{after}")
 
-        print("\nCapture system:")
+        print("\nCapture system (asserted):")
         rec = FlowRecorder(run_name="smoke")
         entry = rec.record(page, "smoke_step", detail="self-test")
         check("screenshot written", bool(entry["screenshot"]) and (rec.dir / entry["screenshot"]).exists())
