@@ -49,6 +49,7 @@ def collect(resp_json):
                 "ats": j.get("atsSource"),
                 "live_at": j.get("liveStartAt") or 0,
                 "active_at": j.get("lastRespondedAt") or 0,
+                "compensation": j.get("compensation"),
             })
     return jobs, jr.get("hasNextPage"), jr.get("totalStartupCount")
 
