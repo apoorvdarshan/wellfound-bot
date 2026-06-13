@@ -224,3 +224,30 @@ recommended|recent|active`.
 - Treat `captures/` + `user_data/` as secrets; never commit or share them.
 - If unsure whether the session is valid, do a dry-run first (it makes a
   read-only modal fetch and reports `blocked` if the session is dead).
+
+---
+
+## 9. Lessons learned (proven on a real run)
+
+What actually worked vs. what got the session flagged, from a 178-job run:
+
+- ✅ **Paced external API batches work.** 171 applications went out in one
+  run (`wf_apply.py batch`, 14–28s apart, stop-on-block) with **zero
+  DataDome blocks**. Read-only searches in the same range are fine too.
+- ❌ **Do NOT rapidly drive a real browser.** Automating the filter UI with
+  fast typing/clicking (to scrape role IDs) is what tripped DataDome — and
+  once the browser session is flagged, even the HTTP API starts returning
+  `403` + a captcha. The warning sign was `geo.captcha-delivery.com` bodies.
+- ❌ **Never `pkill -f "Google Chrome"`** — it kills the user's personal
+  Chrome too. Target the specific process (`--remote-debugging-port=NNNN`)
+  or just the bot profile; clear `user_data/SingletonLock` instead of killing.
+- 🔄 **Recovering from a flag:** open Wellfound once in the **bot profile**
+  (headed), solve the CAPTCHA / sign in, close it; cookies flush to
+  `user_data` and the API works again. Re-export cookies into the latest
+  `captures/api-*/cookies.json`.
+- 💬 **Vary the cover note per job.** Use `wf_apply.py batch --note-file
+  note.txt` with `---`-separated variants; identical notes across hundreds
+  of applies look like spam. See `note.example.txt`.
+- 🎚️ **Roles are a fixed list (no autocomplete API).** Filter by **skills**
+  (`--skills`) or **keywords** instead — those resolve via the invisible API
+  and need no browser.

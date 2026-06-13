@@ -28,6 +28,12 @@ It walks the **full spectrum of web automation**, so it doubles as a learning re
 
 > 🤖 **Driving this with an AI agent?** Read **[INSTRUCTIONS.md](INSTRUCTIONS.md)** — a self-contained, end-to-end runbook (commands, the reverse-engineered API, every filter field, a decision tree, and troubleshooting). An agent can act on it immediately without reading the source.
 
+## ✅ Proof — one real run
+
+A single paced run applied to **171 of 178** salary-listed remote jobs (companies in English-speaking countries), with **zero DataDome blocks** — each application using a cover note varied per job:
+
+![171 of 178 applied, 0 blocked](docs/proof-171-applied.png)
+
 ## ⚠️ Read this first — Wellfound uses DataDome
 
 Wellfound runs **DataDome**, a serious commercial anti-bot. Testing showed:
