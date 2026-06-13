@@ -113,33 +113,33 @@ def cmd_jobs(capture_dir):
         print(f"  --job {jid}   {title}")
 
 
-def cmd_apply(capture_dir, job_id, note, answers, send, delay):
+def load_templates(capture_dir):
+    """Return (session, modal_template, apply_template) or (None, None, None)."""
     reqs = W.load_requests(capture_dir)
     modal_t = template(reqs, "JobApplicationModal")
     apply_t = template(reqs, "CreateJobApplication")
     if not modal_t or not apply_t:
         print("Capture is missing JobApplicationModal / CreateJobApplication templates.")
         print("Re-run `python record_api.py` and apply to ONE job by hand first.")
-        return
+        return None, None, None
+    return W.build_session(W.load_cookies(capture_dir)), modal_t, apply_t
 
-    s = W.build_session(W.load_cookies(capture_dir))
 
-    # 1. Read-only modal fetch → startupId + questions (runs even in dry-run).
+def apply_one(s, modal_t, apply_t, job_id, note, answers, send):
+    """Run the two-step apply for one job. Returns (status, detail).
+
+    status ∈ {applied, dry, already, needs_answers, blocked, error}. This is
+    pure logic + I/O so both `apply` and `batch` share the exact same path.
+    """
+    # 1. Read-only modal fetch → startupId + questions.
     resp, j = _send(s, modal_t, json.dumps({**json.loads(modal_t["post_data"]),
                                             "variables": {"jobListingId": str(job_id)}}))
     if _blocked(resp, j):
-        print("⚠️  DataDome blocked the modal fetch — re-capture with record_api.py.")
-        return
+        return "blocked", "modal fetch"
     startup_id, questions = parse_modal(j)
-    print(f"\njob {job_id}: startupId={startup_id}, {len(questions)} question(s)")
-    for q in questions:
-        tag = "required" if q["required"] else "optional"
-        print(f"   - [{tag}] id={q['id']}: {q['question']!r}")
     if not startup_id:
-        print("Couldn't determine startupId from the modal response — aborting.")
-        return
+        return "error", "no startupId from modal"
 
-    # Build screening-question answers; block only on unanswered REQUIRED ones.
     cqa, missing = [], []
     for q in questions:
         if q["id"] in answers:
@@ -148,46 +148,86 @@ def cmd_apply(capture_dir, job_id, note, answers, send, delay):
         elif q["required"]:
             missing.append(q)
     if missing:
-        print("\nRequired question(s) need an answer via --answer <id>=\"...\":")
-        for q in missing:
-            print(f"   --answer {q['id']}=\"...\"   ({q['question']!r})")
-        print("Aborting until answered.")
-        return
+        return "needs_answers", missing
 
-    # 2. Build the apply body from the captured template.
     body_obj = json.loads(apply_t["post_data"])
     inp = body_obj["variables"]["input"]
     inp["jobListingId"] = str(job_id)
     inp["startupId"] = str(startup_id)
     inp["userNote"] = note or ""
     inp["customQuestionAnswers"] = cqa
-    body = json.dumps(body_obj)
 
-    print("\n=== CreateJobApplication that would be sent ===")
-    print(f"  jobListingId={job_id}  startupId={startup_id}  answers={len(cqa)}  note={note!r}")
     if not send:
-        print("\nDRY-RUN — apply NOT sent. Add --send to apply for real.")
-        return
+        return "dry", {"startupId": startup_id, "questions": questions, "answers": len(cqa)}
 
-    if delay:
-        time.sleep(delay)
-    resp, j = _send(s, apply_t, body)
+    resp, j = _send(s, apply_t, json.dumps(body_obj))
     if _blocked(resp, j):
-        print("⚠️  DataDome blocked the apply — stop and re-capture.")
-        return
+        return "blocked", "apply"
     jl = ((j or {}).get("data") or {}).get("jobListing") or {}
     if jl.get("currentUserApplied"):
-        print(f"\n✅ Applied to {job_id} (HTTP {resp.status_code}).")
-    elif (j or {}).get("errors"):
-        print(f"\nServer responded (HTTP {resp.status_code}): {j['errors'][0].get('message')}")
+        return "applied", resp.status_code
+    errs = (j or {}).get("errors")
+    if errs:
+        msg = errs[0].get("message", "")
+        return ("already" if "already applied" in msg.lower() else "error"), msg
+    return "error", f"HTTP {resp.status_code}: {json.dumps(j)[:200]}"
+
+
+def cmd_apply(capture_dir, job_id, note, answers, send, delay):
+    s, modal_t, apply_t = load_templates(capture_dir)
+    if not s:
+        return
+    if delay:
+        time.sleep(delay)
+    status, detail = apply_one(s, modal_t, apply_t, job_id, note, answers, send)
+    if status == "needs_answers":
+        print(f"\njob {job_id}: required question(s) need --answer <id>=\"...\":")
+        for q in detail:
+            print(f"   --answer {q['id']}=\"...\"   ({q['question']!r})")
+    elif status == "dry":
+        print(f"\njob {job_id}: startupId={detail['startupId']}, "
+              f"{len(detail['questions'])} question(s), {detail['answers']} answered")
+        print("DRY-RUN — apply NOT sent. Add --send to apply for real.")
+    elif status == "applied":
+        print(f"\n✅ Applied to {job_id} (HTTP {detail}).")
+    elif status == "already":
+        print(f"\nℹ️  {job_id}: {detail}")
+    elif status == "blocked":
+        print(f"\n⚠️  DataDome blocked the {detail} — stop and re-capture.")
     else:
-        print(f"\nHTTP {resp.status_code}: {json.dumps(j)[:300]}")
+        print(f"\n{job_id}: {detail}")
+
+
+def cmd_batch(capture_dir, job_ids, note, send, max_n, delay):
+    s, modal_t, apply_t = load_templates(capture_dir)
+    if not s:
+        return
+    job_ids = job_ids[:max_n]
+    print(f"Batch over {len(job_ids)} job(s) (send={send}, delay={delay}s):\n")
+    tally = {}
+    for i, jid in enumerate(job_ids, 1):
+        if i > 1 and delay:
+            time.sleep(delay)
+        status, detail = apply_one(s, modal_t, apply_t, jid, note, {}, send)
+        tally[status] = tally.get(status, 0) + 1
+        icon = {"applied": "✅", "already": "ℹ️", "dry": "•", "needs_answers": "⏭", "blocked": "⛔", "error": "✗"}.get(status, "?")
+        extra = ""
+        if status == "needs_answers":
+            extra = f"skipped — {len(detail)} required Q (use single `apply` with --answer)"
+        elif status in ("already", "error"):
+            extra = str(detail)[:70]
+        print(f"  [{i}/{len(job_ids)}] {icon} {jid} {status} {extra}")
+        if status == "blocked":
+            print("  Stopping batch — DataDome challenge.")
+            break
+    print("\nSummary:", ", ".join(f"{k}={v}" for k, v in tally.items()))
 
 
 def main():
     ap = argparse.ArgumentParser(description="External Wellfound auto-apply (capture-replay).")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("jobs").add_argument("--capture", default=None)
+
     a = sub.add_parser("apply")
     a.add_argument("--job", required=True)
     a.add_argument("--note", default="")
@@ -196,6 +236,14 @@ def main():
     a.add_argument("--send", action="store_true")
     a.add_argument("--delay", type=float, default=0.0)
     a.add_argument("--capture", default=None)
+
+    b = sub.add_parser("batch", help="apply to many job ids (from args or stdin)")
+    b.add_argument("--ids", default=None, help="comma list of job ids; omit to read stdin")
+    b.add_argument("--note", default="")
+    b.add_argument("--send", action="store_true")
+    b.add_argument("--max", type=int, default=5, help="cap on how many to apply (default 5)")
+    b.add_argument("--delay", type=float, default=30.0, help="seconds between jobs (default 30)")
+    b.add_argument("--capture", default=None)
     args = ap.parse_args()
 
     capture_dir = Path(args.capture) if args.capture else W.find_latest_capture()
@@ -205,12 +253,21 @@ def main():
 
     if args.cmd == "jobs":
         cmd_jobs(capture_dir)
-    else:
+    elif args.cmd == "apply":
         answers = {}
         for a_ in args.answers:
             qid, _, val = a_.partition("=")
             answers[qid.strip()] = val
         cmd_apply(capture_dir, args.job, args.note, answers, args.send, args.delay)
+    elif args.cmd == "batch":
+        if args.ids:
+            ids = [x.strip() for x in args.ids.split(",") if x.strip()]
+        else:
+            ids = [line.strip() for line in sys.stdin if line.strip()]
+        if not ids:
+            print("No job ids given (pass --ids or pipe them in).")
+            sys.exit(1)
+        cmd_batch(capture_dir, ids, args.note, args.send, args.max, args.delay)
 
 
 if __name__ == "__main__":

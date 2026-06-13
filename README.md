@@ -33,7 +33,8 @@ to catch. If you let the tool drive the browser (`run.py`), keep it
 | `verify_session.py` | Headed read-only check that the saved session loads the feed. |
 | `record_api.py` | Read-only API recorder: logs the GraphQL/XHR calls Wellfound fires while you browse, to reverse-engineer the apply API. |
 | `wf_replay.py` | External replay client: re-sends a captured API request with a Chrome TLS/JA3 fingerprint + your cookies. **Highest risk**; dry-run default. |
-| `wf_apply.py` | External auto-apply: chains `JobApplicationModal` → `CreateJobApplication` for any job id, handling `startupId` + screening questions. **Highest risk**; dry-run default. |
+| `wf_apply.py` | External auto-apply: `apply` one job or `batch` many; chains `JobApplicationModal` → `CreateJobApplication`, handling `startupId` + screening questions. **Highest risk**; dry-run default. |
+| `wf_search.py` | External job search: replays `JobSearchResultsX` with filters + pagination, returns jobs (id, startupId, title, applied). Read-only. |
 | `config.py` | Your search URL, batch size, delays, dry-run toggle. |
 | `wellfound/human.py` | The "click properly" logic — motion, hovers, timing. |
 | `wellfound/browser.py` | Persistent real-Chrome profile, minimal/coherent fingerprint. |
@@ -109,6 +110,26 @@ unanswered, then sends `CreateJobApplication`. Verified against Wellfound:
 the external client gets an HTTP 200 application response (not a DataDome
 block). Still the riskiest mode — apply to a few, slowly, and re-capture
 when the signature ages out.
+
+### Search + filters (`wf_search.py`) and the full pipeline
+
+```bash
+python wf_search.py                              # paginate the captured filter
+python wf_search.py --max-pages 5 --exclude-applied --remote REMOTE_OPEN --salary-min 100000
+python wf_search.py --role-tags 157714,103480 --location-tags 2203
+```
+
+Filters: `--job-types`, `--remote`, `--salary-min/--salary-max`,
+`--role-tags`, `--location-tags`, `--page`, `--max-pages`. **Roles and
+locations are tag IDs, not free text** — the simplest way to set them is to
+apply your filters on wellfound.com while `record_api.py` records; the
+capture then holds your exact filter and `wf_search` just paginates it.
+
+Chain search → batch apply (capped + spaced; dry-run unless `--send`):
+
+```bash
+python wf_search.py --ids-only --exclude-applied | python wf_apply.py batch --max 5 --delay 45 --send
+```
 
 ## Setup
 
