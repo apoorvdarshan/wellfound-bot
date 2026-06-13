@@ -1,0 +1,11 @@
+# Your saved login session — treat like a password, never commit.
+user_data/
+
+# Captured runs (HTML/screenshots can be large and may contain personal data).
+captures/
+
+__pycache__/
+*.pyc
+.venv/
+venv/
+.DS_Store
